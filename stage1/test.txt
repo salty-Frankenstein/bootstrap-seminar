@@ -1,0 +1,6 @@
+;main:
+C7 C6 00000001       ; mov esi, 1
+C7 C7 00000002 ; mov edi, 2
+
+;loop:
+E8 0000007C    ; call read_char (+124)

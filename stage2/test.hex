@@ -1,0 +1,285 @@
+;; Set up labels for variables and segments:
+00010000@ :fadr   ; Number of bytes in output (= file offset).
+00010004@ :vadr   ; Current virtual address.
+00010008@ :efix   ; Address of next empty fixup.
+00040000@ :rawO   ; Raw output.
+00080000@ :fixT   ; Table of fixups. Contains 2 32-bit elements: output ptr, label ptr.
+01000000@ :lblT   ; "hashtable" of labels. Contains 2 32-bit elements for each label: file offset, virtual address.
+
+;; Start mapping at virtual address 00010000
+00010000@ :text
+
+;; ELF header:
+7F 45 4C 46 01 01 01 00
+00 00 00 00 00 00 00 00
+
+0002     ; type
+0003     ; machine
+00000000 ; version
+=main    ; entry
+$PH      ; phoff (00000034)
+00000000 ; shoff
+00000000 ; flags
+0034     ; ehsize
+0020     ; phentsize
+0004     ; phnum (4)
+0000     ; shentsize
+0000     ; shnum
+0000     ; shstrndx
+
+:PH
+;; Program header 1: the program text.
+00000001 ; type
+00000000 ; offset
+=text    ; vaddr
+00000000 ; paddr
+$EOF     ; filesz
+00010000 ; memsz (over-estimate)
+00000007 ; flags
+00001000 ; alginment
+
+;; Program header 2: the raw output
+00000001 ; type
+00000000 ; offset
+=rawO    ; vaddr
+00000000 ; paddr
+00000000 ; filesz
+00020000 ; memsz
+00000007 ; flags
+00001000 ; alginment
+
+;; Program header 3: table of fixups
+00000001 ; type
+00000000 ; offset
+=fixT    ; vaddr
+00000000 ; paddr
+00000000 ; filesz
+00020000 ; memsz
+00000007 ; flags
+00001000 ; alginment
+
+;; Program header 4: hashtable of labels.
+00000001 ; type
+00000000 ; offset
+=lblT    ; vaddr
+00000000 ; paddr
+00000000 ; filesz
+08000000 ; memsz
+00000007 ; flags
+00001000 ; alginment
+
+
+:main
+
+; We need to initialize the variables in the elf header:
+C7 05 =fadr 00000000    ; mov [fadr], 0
+C7 05 =vadr 00010000    ; mov [vadr], 0x00010000 ; This is a sane default for how we use the program.
+C7 05 =efix =fixT       ; mov [efix], fixT
+
+; Zero registers at start. Also doubles as a reset after emitting data.
+:res
+C7 C6 00000000          ; mov esi, 0
+C7 C7 00000000          ; mov edi, 0
+
+; Main loop
+:loop
+E8 -rCH                 ; call read_char(rCH)
+
+; Start of comment?
+81 F8 0000003B          ; cmp eax, 0x3B
+0F 84 -inC              ; je in_comment
+
+; @ sign - store current number and reset
+81 F8 00000040          ; cmp eax, 0x40
+0F 85 -lcA              ; jne lcA
+89 35 =vadr             ; mov [vadr], esi
+E9 -res                 ; jmp reset
+:lcA                    ; (loop_cont_a)
+
+; : - read label, store info
+81 F8 0000003A          ; cmp eax, 0x3A
+0F 85 -lcB              ; jne lcB
+E8 -rLBL                ; call read_label(rLBL)
+8B 1D =fadr             ; mov ebx, [fadr]
+89 18                   ; mov [eax], ebx
+8B 1D =vadr             ; mov ebx, [vadr]
+89 58 04                ; mov [eax+4], ebx
+E9 -res                 ; jmp reset
+:lcB                    ; (loop_cont_b)
+
+; = - read label, store fixup
+81 F8 0000003D          ; cmp eax, 0x3D
+0F 85 -lcC              ; jne lcC
+C7 C6 00000000          ; mov esi, 0
+C7 C7 00000004          ; mov edi, 4
+E9 -emiF                ; jmp emit_fixup
+:lcC                    ; (loop_cont_c)
+
+; - - read label, store fixup with delta
+81 F8 0000002D          ; cmp eax, 0x2D
+0F 85 -lcD              ; jne lcD
+C7 C6 FFFFFFFC          ; mov esi, -0x04
+2B 35 =vadr             ; sub esi, [vadr]   ; Note: stores -([vadr] + 4) in esi
+C7 C7 00000004          ; mov edi, 4
+E9 -emiF                ; jmp emit_fixup
+:lcD                    ; (loop_cond_d)
+
+; $ - read label, store fixup for abolute address
+81 F8 00000024          ; cmp eax, 0x24
+0F 85 -lcE              ; jne lcE
+C7 C6 00000000          ; mov esi, 0
+C7 C7 00000000          ; mov edi, 0
+E9 -emiF                ; jmp emit_fixup
+:lcE                    ; (loop_cont_e)
+
+; Is it a digit? Note that we don't do a very good test here, but it is enough if we are
+; careful with the format of the input files.
+81 F8 00000030          ; cmp eax, 0x30
+0F 82 -emiB             ; jb emit
+
+; If it is A-F or a-f, increase a bit so that it will be in the right place later on.
+81 F8 00000041          ; cmp eax, 0x41
+0F 82 -noal             ; jb no_alpha
+81 E8 00000007          ; sub eax, 7
+:noal ;(no_alpha)
+; Remove the topmost bits. This causes digits to become 0-9, but also works for A-F.
+81 E0 0000000F          ; and eax, 0x0F
+
+; Store it.
+C1 F6 04                ; shl esi, 4
+09 C6                   ; or esi, eax
+81 C7 00000001          ; add edi, 1
+
+E9 -loop                ; jmp loop
+
+;; Emit one or more bytes if we have anything.
+:emiB ;emit:
+
+; More to output?
+81 FF 00000000          ; cmp edi, 0
+0F 8E -loop             ; jle loop
+
+; Output one byte:
+C7 C3 =rawO             ; mov ebx, rawO
+03 1D =fadr             ; add ebx, [fadr]
+89 F0                   ; mov eax, esi
+88 03                   ; mov [ebx], al   ; byte version!
+C1 EE 08                ; shr esi, 8
+81 EF 00000002          ; sub edi, 2
+
+; Increment offset and virtual address.
+81 05 =fadr 00000001    ; add [fadr], 0x01
+81 05 =vadr 00000001    ; add [vadr], 0x01
+
+; Output more!
+E9 -emiB                ; jmp emit
+
+; Emit a fixup.
+; esi stores the value that should be stored at the output location, it will
+; be added to the value of the label, so this is how we do relative addressing.
+; edi stores the offset into the label data. It determines if we use file- or
+; virtual adresses.
+:emiF ;(emit_fixup:)
+E8 -rLBL                ; call read_label
+01 F8                   ; add eax, edi
+
+; Store esi to the output.
+C7 C3 =rawO             ; mov ebx, rawO
+03 1D =fadr             ; add ebx, [fadr]
+89 33                   ; mov [ebx], esi
+
+81 05 =fadr 00000004    ; add [fadr], 0x04
+81 05 =vadr 00000004    ; add [vadr], 0x04
+
+; Create an entry in the fixup table.
+8B 0D =efix             ; mov ecx, [efix]
+89 19                   ; mov [ecx], ebx    ; output ptr from above
+89 41 04                ; mov [ecx+4], eax  ; label ptr from above
+81 05 =efix 00000008    ; add [efix], 0x08
+
+E9 -res                 ; jmp reset
+
+; Consume a comment.
+:inC ;(in_comment:)
+E8 -rCH                 ; call read_char
+81 F8 0000000A          ; cmp eax, 0x0A
+0F 84 -loop             ; je loop
+E9 -inC                 ; jmp in_comment
+
+; Read the name of a label. Store the address to the label table in eax.
+:rLBL ;(read_label:)
+C7 C5 00000000          ; mov ebp, 0
+
+:rll ;(read_label_loop:)
+E8 -rCH                 ; call read_char
+81 F8 00000020          ; cmp eax, 0x20
+0F 86 -rld              ; jbe read_label_done
+C1 F5 06                ; shl ebp, 6
+
+81 E0 0000003F          ; and eax, 0x3F
+09 C5                   ; or ebp, eax
+E9 -rll                 ; jmp read_label_loop
+
+:rld ;(read_label_done:)
+89 E8                   ; mov eax, ebp
+C1 F0 03                ; shl eax, 3     ; multiply by 8
+81 C0 =lblT             ; add eax, lblT
+C3                      ; ret
+
+; Read character from stdin into eax.
+:rCH ;(read_char:)
+; Reserve space on the stack:
+68 00000000             ; push 0
+
+; Read a character from stdin: read(0, esp, 1), syscall #3
+C7 C0 00000003          ; mov eax, 3
+C7 C3 00000000          ; mov ebx, 0
+89 E1                   ; mov ecx, esp
+C7 C2 00000001          ; mov edx, 1
+CD 80                   ; int 0x80
+
+; If we get 0 back, we are done.
+81 F8 00000000          ; cmp eax, 0
+0F 84 -exit             ; je exit
+
+; Read byte into eax
+58                      ; pop eax
+
+C3                      ; ret
+
+:exit
+; Do fixups!
+C7 C0 =fixT             ; mov eax, fixT
+:fixL
+; Done?
+3B 05 =efix             ; cmp eax, [efix]
+0F 83 -fixD             ; jae fixD
+; Load output ptr of fixup:
+8B 18                   ; mov ebx, [eax]
+; Load virtual address of fixup, and read the address itself.
+8B 48 04                ; mov ecx, [eax+4]
+8B 09                   ; mov ecx, [ecx]
+
+; Add the virtual address to the output address. This forms the proper offset. At the end
+; of the day, we get: virtual addr + (- location) => location - virtual addr.
+01 0B                   ; add [ebx], ecx  
+
+; Go to next fixup.
+81 C0 00000008          ; add eax, 8
+E9 -fixL                ; jmp fixup_loop
+:fixD
+
+; Output everything in the buffer by calling write(1, 0x00040000)
+C7 C0 00000004          ; mov eax, 4
+C7 C3 00000001          ; mov ebx, 1
+C7 C1 =rawO             ; mov ecx, rawO
+8B 15 =fadr             ; mov edx, [fadr]
+CD 80                   ; int 0x80
+; Assume everything was fine...
+        
+; Call exit(0)
+C7 C0 00000001          ; mov eax, 1
+C7 C3 00000000          ; mov ebx, 0
+CD 80                   ; int 0x80
+
+:EOF ; need one whitespace after last label

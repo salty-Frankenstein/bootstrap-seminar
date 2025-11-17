@@ -16,9 +16,9 @@ b _start
 # b 32 
 # b loop
 # b 167
-b 67
+# b 67
 
 # 自动运行
-run < test.hex
+run < stage2-linked.hex
 
 

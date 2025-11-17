@@ -138,7 +138,7 @@ emit:
 
     mov eax, [fileoffset]   ;; write 1 byte
     mov ebx, [curnum]
-    mov [eax+out], bx       ;; out[fileoffset] = curnum
+    mov [eax+out], bl       ;; out[fileoffset] = curnum
     shr dword [curnum], 8
 
     add dword [fileoffset], 1     ;; point to next byte

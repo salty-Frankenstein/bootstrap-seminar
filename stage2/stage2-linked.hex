@@ -1,0 +1,278 @@
+;; Set up labels for variables and segments:
+00010000@ :foff   ; fileoffset
+00010004@ :vadr   ; viraddr
+00010008@ :fidx   ; fixupidx
+0001000c@ :curn   ; curnum
+00040000@ :outp   ; output
+00080000@ :fxup   ; fixup table
+01000000@ :labl   ; label
+01000004@ :labf   ; label+4
+
+;; Start mapping at virtual address 00010000
+00010000@ :text
+
+;; ELF header:
+7F 45 4C 46 01 01 01 00
+00 00 00 00 00 00 00 00
+
+0002     ; type
+0003     ; machine
+00000000 ; version
+=main    ; entry
+$PH      ; phoff (00000034)
+00000000 ; shoff
+00000000 ; flags
+0034     ; ehsize
+0020     ; phentsize
+0004     ; phnum (4)
+0000     ; shentsize
+0000     ; shnum
+0000     ; shstrndx
+
+:PH
+;; Program header 1: the program text.
+00000001 ; type
+00000000 ; offset
+=text    ; vaddr
+00000000 ; paddr
+$EOF     ; filesz
+00010000 ; memsz (over-estimate)
+00000007 ; flags
+00001000 ; alginment
+
+;; Program header 2: the raw output
+00000001 ; type
+00000000 ; offset
+=outp    ; vaddr
+00000000 ; paddr
+00000000 ; filesz
+00020000 ; memsz
+00000007 ; flags
+00001000 ; alginment
+
+;; Program header 3: table of fixups
+00000001 ; type
+00000000 ; offset
+=fxup    ; vaddr
+00000000 ; paddr
+00000000 ; filesz
+00020000 ; memsz
+00000007 ; flags
+00001000 ; alginment
+
+;; Program header 4: hashtable of labels.
+00000001 ; type
+00000000 ; offset
+=labl    ; vaddr
+00000000 ; paddr
+00000000 ; filesz
+08000000 ; memsz
+00000007 ; flags
+00001000 ; alginment
+
+:main                   ;;_start:
+
+; We need to initialize the variables in the elf header:
+C7 05 =foff 00000000    ; mov [foff], 0
+C7 05 =vadr 00010000    ; mov [vadr], 0x00010000 ; This is a sane default for how we use the program.
+C7 05 =fidx 00000000    ; mov [fidx], 0
+C7 05 =curn 00000000    ; mov [curn], 0
+
+                        ;; edi: bytes read
+C7 C7 00000000          ;; mov edi, 0
+E9 -loop                ;; jmp loop
+
+:clcm
+E8 -rdby                ;; call rdby
+81 F8 0000000A          ;; cmp eax, 0x0A       ;; if ch != '\n' goto clear
+0F 85 -clcm             ;; jne clcm
+
+:loop
+C7 C5 00000000          ;; mov ebp, 0          ;; loop variable: read number twice
+
+:strd
+
+E8 -rdby                ;; call rdby
+
+81 F8 0000003B          ;; cmp eax, 0x3B       ;; if ch == ';' goto clear
+0F 84 -clcm             ;; je clcm
+
+81 F8 00000040          ;; cmp eax, 0x40       ;; if ch != '@' goto ntat
+0F 85 -ntat             ;; jne ntat
+8B 05 =curn             ;; mov eax, [curn]   ;; vadr <- curn
+89 05 =vadr             ;; mov [vadr], eax
+C7 05 =curn 00000000    ;; mov dword [curn], 0
+C7 C7 00000000          ;; mov edi, 0          ;; size of curn = 0 !!
+E9 -loop                ;; jmp loop
+
+:ntat
+81 F8 0000003A          ;; cmp eax, 0x3A           ;; if ch != ':' goto ntcl
+0F 85 -ntcl             ;; jne ntcl
+
+E8 -rdlb                ;; call rdlb          ;; the result hash is in esi
+C1 F6 03                ;; shl esi, 3              ;; an entry has 8 bytes
+8B 05 =foff             ;; mov eax, [foff]   ;; labl[hash].file <- foff 
+89 86 =labl             ;; mov [esi+labl], eax    
+8B 05 =vadr             ;; mov eax, [vadr]      ;; labl[hash].vir <- vadr
+89 86 =labf             ;; mov [esi+labl+4], eax  
+E9 -loop                ;; jmp loop
+
+:ntcl
+89 C1                   ;; mov ecx, eax            ;; here we handle '=' and '-'
+50                      ;; push eax                ;; save eax == ch
+81 F1 0000002D          ;; xor ecx, 0x2D
+81 E1 FFFFFFEF          ;; and ecx, 0xFFFFFFEF
+81 F9 00000000          ;; cmp ecx, 0
+0F 85 -nt23             ;; jne nt23
+
+E8 -rdlb                ;; call rdlb
+8B 05 =fidx             ;; mov eax, [fidx]     ;; fxup[fidx].outp <- foff
+8B 1D =foff             ;; mov ebx, [foff]
+89 98 =fxup             ;; mov [eax+fxup], ebx
+
+C1 F6 03                ;; shl esi, 3              ;; vaddridx of hash 
+81 C6 =labf             ;; add esi, labl+4        
+
+81 C0 00000004          ;; add eax, 4              ;; fxup[fidx].labl <- vaddridx
+01 B0 =fxup             ;; add [eax+fxup], esi
+    
+81 05 =fidx 00000008    ;; add dword [fidx], 8 ;; point to the next entry
+
+    ;; if ch == 0x2D, relative substract from output in advance
+58                      ;; pop eax
+81 F0 0000002D          ;; xor eax, 0x2D           ;; now eax is either 3D or 2D
+C1 E8 04                ;; shr eax, 4              ;; 0 or 1
+81 E8 00000001          ;; sub eax, 1              ;; mask
+8B 1D =vadr             ;; mov ebx, [vadr]      ;; ebx <- vadr + 4
+83 C3 04                ;; add ebx, 4
+23 D8                   ;; and ebx, eax            ;; assign only when eax == 2D
+8B 05 =foff             ;; mov eax, [foff]
+29 98 =outp             ;; sub [eax+outp], ebx
+
+81 05 =foff 00000004    ;; add dword [foff], 4       ;; point to the next number
+81 05 =vadr 00000004    ;; add dword [vadr], 4          ;; update vadr!!
+E9 -loop                ;; jmp loop
+
+:nt23
+81 F8 00000024          ;; cmp eax, 0x24           ;; if ch != '$' goto ntdl
+0F 85 -ntdl             ;; jne ntdl
+
+E8 -rdlb                ;; call rdlb
+8B 05 =fidx             ;; mov eax, [fidx]     ;; fxup[fidx].outp <- foff
+8B 1D =foff             ;; mov ebx, [foff]
+89 98 =fxup             ;; mov [eax+fxup], ebx
+
+C1 F6 03                ;; shl esi, 3              ;; fileaddridx of hash 
+81 C6 =labl             ;; add esi, labl
+
+81 C0 00000004          ;; add eax, 4              ;; fxup[fidx].labl <- fileidx
+01 B0 =fxup             ;; add [eax+fxup], esi
+
+81 05 =fidx 00000008    ;; add dword [fidx], 8 ;; point to the next entry
+
+81 05 =foff 00000004    ;; add dword [foff], 4       ;; point to the next number
+81 05 =vadr 00000004    ;; add dword [vadr], 4          ;; update vadr!!
+E9 -loop                ;; jmp loop
+
+:ntdl
+    ;; the origin logic of stage 1
+81 F8 00000020          ;; cmp eax, 0x20           ;; if ch <= 0x20(white) goto emit
+0F 86 -emit             ;; jbe emit
+
+81 F8 00000040          ;; cmp eax, 0x40           ;; if ch < 0x40 (digits) goto mask
+0F 82 -mask             ;; jb mask
+
+81 E8 00000007          ;; sub eax, 0x7            ;; ch -= 7
+
+:mask
+81 E0 0000000F          ;; and eax, 0xF
+C1 25 =curn 04          ;; shl dword [curn], 4         ;; esi = (esi << 4) | eax
+09 05 =curn             ;; or [curn], eax
+
+83 C5 01                ;; add ebp, 1
+83 FD 02                ;; cmp ebp, 2
+0F 82 -strd             ;; jb strd            ;; 2 digits = 1 byte
+
+81 C7 00000001          ;; add edi, 1              ;; byte read + 1
+E9 -loop                ;; jmp loop
+
+:emit
+81 FF 00000000          ;; cmp edi, 0              ;; if it reads nothing
+0F 84 -loop             ;; je loop
+
+8B 05 =foff             ;; mov eax, [foff]   ;; write 1 byte
+8B 1D =curn             ;; mov ebx, [curn]
+88 98 =outp             ;; mov [eax+outp], bl       ;; outp[foff] = curn
+C1 2D =curn 08          ;; shr dword [curn], 8
+
+81 05 =foff 00000001    ;; add dword [foff], 1     ;; point to next byte
+81 05 =vadr 00000001    ;; add dword [vadr], 1        ;; update vadr
+
+81 EF 00000001          ;; sub edi, 1              ;; count byte to emit
+81 FF 00000000          ;; cmp edi, 0
+0F 87 -emit             ;; ja emit
+E9 -loop                ;; jmp loop
+
+:rdby   ; read a byte, return in eax
+68 00000000             ;; push 0
+C7 C0 00000003          ;; mov eax, 3
+C7 C3 00000000          ;; mov ebx, 0
+89 E1                   ;; mov ecx, esp
+C7 C2 00000001          ;; mov edx, 1
+CD 80                   ;; int 0x80
+
+; HACK: if read EOF, do fxup
+81 F8 00000000          ;; cmp eax, 0
+0F 84 -done             ;; je done
+
+58                      ;; pop eax
+C3                      ;; ret
+
+:rdlb                   ;; read a labl, get the hash value
+                        ;; return in esi
+                        ;; a labl is up to 4 bytes
+C7 C6 00000000          ;; mov esi, 0
+:innr
+E8 -rdby                ;; call rdby
+
+81 F8 00000020          ;; cmp eax, 0x20   ;; if ch == is white goto iswt
+0F 86 -iswt             ;; jbe iswt
+
+81 E0 0000003F          ;; and eax, 0x3F
+C1 F6 06                ;; shl esi, 6      ;; esi = (esi << 6) | eax
+09 C6                   ;; or esi, eax
+
+E9 -innr                ;; jmp innr
+
+:iswt
+C3                      ;; ret
+
+:done                   ;; after reading fill fxup
+C7 C7 =fxup             ;; mov edi, fxup      ;; edi: index, base
+8B 0D =fidx             ;; mov ecx, [fidx] ;; ecx: boundary
+81 C1 =fxup             ;; add ecx, fxup
+
+:fxlp
+8B 07                   ;; mov eax, [edi]      ;; eax <- output pointer
+8B 5F 04                ;; mov ebx, [edi+4]    ;; ebx <- labl pointer
+
+8B 1B                   ;; mov ebx, [ebx]
+01 98 =outp             ;; add [eax+outp], ebx  ;; [outputptr] += [lablptr]
+
+81 C7 00000008          ;; add edi, 8          ;; point to the next entry
+39 CF                   ;; cmp edi, ecx        ;; if edi < fidx goto fxlp
+0F 82 -fxlp             ;; jb fxlp
+
+:otpt                   ;; then output
+C7 C0 00000004          ;; mov eax, 4          ;; use one write call to output everything
+C7 C3 00000001          ;; mov ebx, 1
+C7 C1 =outp             ;; mov ecx, outp
+8B 15 =foff             ;; mov edx, [foff]
+CD 80                   ;; int 0x80
+
+;; exit(0)
+C7 C0 00000001          ;; mov eax, 1
+C7 C3 00000000          ;; mov ebx, 0
+CD 80                   ;; int 0x80
+
+:EOF ; need one whitespace after last label

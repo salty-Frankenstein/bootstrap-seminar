@@ -111,6 +111,9 @@ not2D3D:
     jmp loop
 
 notdollar:
+    cmp eax, 0x22           ;; if ch == "\"" goto readstring
+    je readstring
+
     ;; the origin logic of stage 1
     cmp eax, 0x20           ;; if ch <= 0x20(white) goto emit
     jbe emit
@@ -164,6 +167,23 @@ readbyte:   ; read a byte, return in eax
     ;; get char
     pop eax
     ret
+
+readstring:         ;; read a string
+    call readbyte
+    
+    cmp eax, 0x22    ;; if ch == "\"" goto loop
+    je loop
+
+    cmp eax, 0x5C    ;; if ch == "\\" read another
+    jne putchar
+    call readbyte
+
+putchar:
+    mov ebx, [fileoffset]   ;; out[fileoffset] <- ch
+    mov [ebx+out], eax
+    add dword [fileoffset], 1     ;; fileoffset++; viraddr++
+    add dword [viraddr], 1
+    jmp readstring
 
 readlabel:          ;; read a label, get the hash value
                     ;; return in esi

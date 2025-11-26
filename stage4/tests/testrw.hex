@@ -1,0 +1,27 @@
+;; before we reach a repl, we may test some words here
+
+;; test ! and @, !b and @b
+81 EF 00000004  ;; sub edi, 4      ; make space on stack
+C7 C0 =glbl     ;; mov eax, =glbl  ; push address of a global variable
+89 07           ;; mov [edi], eax  
+
+E8 -dup      ;; call dup    (addr addr)
+
+81 EF 00000004  ;; sub edi, 4            ; make space on stack
+C7 C0 c0ffeeab  ;; mov eax, 0xc0ffeeab   ; push a 0xc0ffeeab 
+89 07           ;; mov [edi], eax  (addr addr 0xc0ffeeab) 
+E8 -wtad     ;; call !                   ; glbl <- 0xc0ffeeab ( addr )
+
+E8 -dup      ;; call dup    (addr addr)
+81 EF 00000004  ;; sub edi, 4            ; make space on stack
+C7 C0 00000042  ;; mov eax, 0x42         ; push a 0x42 
+89 07           ;; mov [edi], eax  (addr addr 0x42) 
+
+E8 -wtab     ;; call !b               ; glbl[0] <- 0x42 ( addr )
+;; glbl = 0xc0ffeeab -> 0xc0ffee42
+
+E8 -dup      ;; call dup    (addr addr)
+E8 -rdab     ;; call @b               ; push glbl[0] ( addr 0x42 )
+E8 -swap     ;; call swap             ; ( 0x42 addr )
+
+E8 -rdad     ;; call @         ; ( 0x42 0xc0ffee42 )

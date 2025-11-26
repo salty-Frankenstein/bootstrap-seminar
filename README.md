@@ -15,10 +15,10 @@ Stack Manipulation
 - [x] `swap`
 
 Memory Access
-- [ ] `@`
-- [ ] `!`
-- [ ] `@b`
-- [ ] `!b`
+- [x] `@`
+- [x] `!`
+- [x] `@b`
+- [x] `!b`
 
 Input/Output
 

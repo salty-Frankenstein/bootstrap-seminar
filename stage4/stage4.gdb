@@ -14,3 +14,20 @@ run
 
 layout asm
 layout regs
+
+tui focus cmd
+
+# print top 5 numbers on the stack
+define fs
+  x/5wx $edi
+end
+
+# 手动ni跳过call
+define cn
+    # 下一条指令地址
+    set $next = $eip + 5
+    # 临时断点
+    tbreak *$next
+    # 继续运行
+    continue
+end

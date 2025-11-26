@@ -66,12 +66,32 @@ C7 C7 00400000  ;; mov edi, 0x00400000  ; point to the top of the forth stack
 
 ;; before we reach a repl, we may test some words here
 
+;; test ! and @, !b and @b
 81 EF 00000004  ;; sub edi, 4      ; make space on stack
-C7 C0 00000003  ;; mov eax, 3
-89 07           ;; mov [edi], eax  ; push eax onto stack
-E8 -dup      ;; call dup
-E8 -swap     ;; call swap
-E8 -drop     ;; call drop
+C7 C0 =glbl     ;; mov eax, =glbl  ; push address of a global variable
+89 07           ;; mov [edi], eax  
+
+E8 -dup      ;; call dup    (addr addr)
+
+81 EF 00000004  ;; sub edi, 4            ; make space on stack
+C7 C0 c0ffeeab  ;; mov eax, 0xc0ffeeab   ; push a 0xc0ffeeab 
+89 07           ;; mov [edi], eax  (addr addr 0xc0ffeeab) 
+E8 -wtad     ;; call !                   ; glbl <- 0xc0ffeeab ( addr )
+
+E8 -dup      ;; call dup    (addr addr)
+81 EF 00000004  ;; sub edi, 4            ; make space on stack
+C7 C0 00000042  ;; mov eax, 0x42         ; push a 0x42 
+89 07           ;; mov [edi], eax  (addr addr 0x42) 
+
+E8 -wtab     ;; call !b               ; glbl[0] <- 0x42 ( addr )
+;; glbl = 0xc0ffeeab -> 0xc0ffee42
+
+E8 -dup      ;; call dup    (addr addr)
+E8 -rdab     ;; call @b               ; push glbl[0] ( addr 0x42 )
+E8 -swap     ;; call swap             ; ( 0x42 addr )
+
+E8 -rdad     ;; call @         ; ( 0x42 0xc0ffee42 )
+
 ;; E8 -repl  ;; call repl
 
 ;; call exit
@@ -107,8 +127,48 @@ C3              ;; ret
 :swap
 8B 07           ;; mov eax, [edi]      ; get n2
 8B 4F 04        ;; mov ecx, [edi+4]    ; get n1
-89 4F 04        ;; mov [edi+4], ecx    ; put n1 to n2 position
-89 07           ;; mov [edi], eax      ; put n2 to n1 position
+89 47 04        ;; mov [edi+4], ecx    ; put n1 to n2 position
+89 0F           ;; mov [edi], eax      ; put n2 to n1 position
+C3              ;; ret
+
+;; @: ( addr -- value ) read address
+00 "@" 00
+=swap ;; pointer to previous word
+:rdad
+8B 07           ;; mov eax, [edi]      ; get addr
+8B 00           ;; mov eax, [eax]      ; get value at addr
+89 07           ;; mov [edi], eax     ; push value onto stack
+C3              ;; ret
+
+;; !: ( addr value -- ) write address
+00 "!" 00
+=rdad ;; pointer to previous word
+:wtad
+8B 07           ;; mov eax, [edi]      ; get value
+81 C7 00000004  ;; add edi, 4          ; pop
+8B 0F           ;; mov ecx, [edi]      ; get addr
+89 01           ;; mov [ecx], eax      ; store value at addr
+81 C7 00000004  ;; add edi, 4          ; adjust stack pointer
+C3              ;; ret
+
+;; @b: ( addr -- byte ) read byte
+00 "@b" 00
+=wtad ;; pointer to previous word
+:rdab
+8B 07           ;; mov eax, [edi]        ; get addr
+0F B6 00        ;; movzx eax, byte [eax] ; get byte at addr
+89 07           ;; mov [edi], eax        ; push byte onto stack
+C3              ;; ret
+
+;; !b: ( addr byte -- ) write byte
+00 "!b" 00
+=rdab ;; pointer to previous word
+:wtab
+8B 07           ;; mov eax, [edi]      ; get byte
+81 C7 00000004  ;; add edi, 4          ; pop
+8B 0F           ;; mov ecx, [edi]      ; get addr
+88 01           ;; mov byte [ecx], al  ; store byte at addr
+81 C7 00000004  ;; add edi, 4          ; adjust stack pointer
 C3              ;; ret
 
 :EOF ; need one whitespace after last label

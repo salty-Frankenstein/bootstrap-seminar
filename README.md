@@ -22,9 +22,9 @@ Memory Access
 
 Input/Output
 
-- [ ] `get-char`
-- [ ] `put-char`
-- [ ] `put-string`
+- [x] `get-char`
+- [x] `put-char`
+- [x] `put-string`
 
 String Manipulation
 - [ ] `read`

@@ -70,6 +70,13 @@ test-stage3: stage3/stage3_1 stage2/stage2_1
 		printf "\033[31m✗ Test stage3 failed!\033[0m\n"; \
 	fi
 
+stage4/stage4: stage3/stage3_1 stage4/stage4.hex
+	stage3/stage3_1 < stage4/stage4.hex > stage4/stage4
+	chmod +x stage4/stage4
+
+test-stage4: stage4/stage4
+	gdb -x ./stage4/stage4.gdb stage4/stage4
+
 test: test-stage1 test-stage2 test-stage3
 
 clean-stage1:
@@ -81,4 +88,7 @@ clean-stage2: clean-stage1
 clean-stage3: clean-stage2
 	rm -f stage3/stage3 stage3/stage3.o stage3/stage3_1 stage3/out1 stage3/out2 stage3/out3
 
-clean: clean-stage1 clean-stage2 clean-stage3
+clean-stage4: clean-stage3
+	rm -r stage4/stage4
+
+clean: clean-stage1 clean-stage2 clean-stage3 clean-stage4

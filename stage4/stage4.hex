@@ -2,11 +2,18 @@
 
 ;; Set up labels for variables and segments:
 00200000@ :glbl  ; global variables
-00200004@ :fdin  ; file descriptor for input
-00200008@ :fdot  ; file descriptor for output
+00200004@ :FDIN  ; file descriptor for input
+00200008@ :FDOT  ; file descriptor for output
+0020000C@ :FTXT  ; pointer to free text space
+00200010@ :FSTR  ; pointer to free string space
+00200014@ :HEAD  ; pointer to the latest defined word
+00200018@ :OESP  ; original esp 
+
 
 00200020@ :temp  ; temporary variable for internal use
 00300000@ :fstk  ; forth stack
+00100000@ :fstz  ; forth stack size
+00500000@ :strb  ; string buffer
 
 ;; text segment starts at virtual address 00010000
 00010000@ :text
@@ -24,7 +31,7 @@ $PH      ; phoff (00000034)
 00000000 ; flags
 0034     ; ehsize
 0020     ; phentsize
-0003     ; phnum (3)
+0004     ; phnum (4)
 0000     ; shentsize
 0000     ; shnum
 0000     ; shstrndx
@@ -63,6 +70,17 @@ $EOF     ; filesz
 00000006 ; flags (no execute)
 00001000 ; alignment
 
+;; Program header 4: string buffer, 1 MiB
+;; from 0x00500000 to 0x00600000
+00000001 ; type
+00000000 ; offset
+=strb    ; vaddr
+00000000 ; paddr
+00000000 ; filesz
+00100000 ; memsz 1 MiB
+00000006 ; flags (no execute)
+00001000 ; alignment
+
 ;; put a test string here
 :tstr
 "hello, World!" 00
@@ -72,10 +90,27 @@ $EOF     ; filesz
 ;; initialize the Forth stack pointer
 C7 C7 00400000        ;; mov edi, 0x00400000  ; point to the top of the forth stack
 ;; initialize file descriptors
-C7 05 =fdin 00000000  ;; mov [fdin], 0      ; store in fdin
-C7 05 =fdot 00000001  ;; mov [fdot], 1      ; store in fdot
+C7 05 =FDIN 00000000  ;; mov [FDIN], 0      ; store in FDIN
+C7 05 =FDOT 00000001  ;; mov [FDOT], 1      ; store in FDOT
+;; initialize free text and string space pointers
+C7 C0 =EOF            ;; mov eax, =EOF      ; pointer to the end of code segment
+89 05 =FTXT           ;; mov [FTXT], eax    ; store in FTXT
+C7 05 =FSTR 00500000  ;; mov [FSTR], 0x00500000 ; store in FSTR
+89 25 =OESP           ;; mov [OESP], edi    ; store original esp
+C7 C0 =LAST           ;; mov eax, =LAST     ; pointer to the end of the word definitions
+89 05 =HEAD           ;; mov [HEAD], eax    ; store in HEAD
+C7 C0 =EOF            ;; mov eax, =EOF      ; pointer to the end of code segment
+89 05 =FTXT           ;; mov [FTXT], eax    ; store in FTXT     
 
 ;; before we reach a repl, we may test some words here
+E8 -hdat     ;; call head@    
+E8 -ftat     ;; call free@    
+E8 -oesp     ;; call old-esp@ 
+E8 -fdin     ;; call fd-in@   
+E8 -fdot     ;; call fd-out@  
+E8 -smin     ;; call stack-min@ 
+E8 -stsz     ;; call stack-size 
+E8 -stcr     ;; call stack-curr@ 
 
 ;; test string output
 81 EF 00000004  ;; sub edi, 4            ; make space on stack
@@ -188,13 +223,13 @@ C3              ;; ret
 81 C7 00000004  ;; add edi, 4          ; adjust stack pointer
 C3              ;; ret
 
-;; get-char: ( -- char ) read a char from fdin
+;; get-char: ( -- char ) read a char from FDIN
 00 "get-char" 00
 =wtab ;; pointer to previous word
 :gtch
 
 C7 C0 00000003          ;; mov eax, 3
-8B 1D =fdin             ;; mov ebx, [fdin]      ; file descriptor
+8B 1D =FDIN             ;; mov ebx, [FDIN]      ; file descriptor
 C7 C1 =temp             ;; mov ecx, temp
 C7 C2 00000001          ;; mov edx, 1
 CD 80                   ;; int 0x80
@@ -212,20 +247,20 @@ C7 C0 FFFFFFFF          ;; mov eax, 0xFFFFFFFF  ; return -1
 89 07                   ;; mov [edi], eax    ; push eax onto stack
 C3                      ;; ret
 
-;; put-char: ( char -- ) write a char to fdot
+;; put-char: ( char -- ) write a char to FDOT
 00 "put-char" 00
 =gtch ;; pointer to previous word
 :ptch
 8B 07                   ;; mov eax, [edi]       ; get the char to write
 81 C7 00000004          ;; add edi, 4           ; pop
 C7 C0 00000004          ;; mov eax, 4           ; syscall: write
-8B 1D =fdot             ;; mov ebx, [fdot]      ; file descriptor
+8B 1D =FDOT             ;; mov ebx, [FDOT]      ; file descriptor
 89 F9                   ;; mov ecx, edi         ; buffer to write
 C7 C2 00000001          ;; mov edx, 1           ; write 1 byte
 CD 80                   ;; int 0x80             ; make syscall
 C3                      ;; ret
 
-;; put-string: ( addr -- ) write a string to fdot
+;; put-string: ( addr -- ) write a string to FDOT
 00 "put-string" 00
 =ptch ;; pointer to previous word
 :ptst
@@ -241,11 +276,78 @@ C7 C2 FFFFFFFF          ;; mov edx, 0xFFFFFFFF  ; edx = -1
 0F 85 -lcnt             ;; jne lcnt             ; if not null, continue
 ;; write the string
 C7 C0 00000004          ;; mov eax, 4           ; syscall: write
-8B 1D =fdot             ;; mov ebx, [fdot]      ; file descriptor
+8B 1D =FDOT             ;; mov ebx, [FDOT]      ; file descriptor
 ;; ecx already has the buffer address
 ;; edx already has the length
 CD 80                   ;; int 0x80             ; make syscall
 C3                      ;; ret
+
+;; head@: ( -- addr ) get the latest defined word address
+00 "head@" 00
+=ptst ;; pointer to previous word
+:hdat
+81 EF 00000004         ;; sub edi, 4           ; make space on stack
+C7 07 =HEAD            ;; mov [edi], HEAD      ; get HEAD
+C3                     ;; ret
+
+;; free@: ( -- addr ) get the free text space pointer
+00 "free@" 00
+=hdat ;; pointer to previous word
+:ftat
+81 EF 00000004         ;; sub edi, 4           ; make space on stack
+C7 07 =FTXT            ;; mov [edi], FTXT      ; get FTXT
+C3                     ;; ret
+
+;; old-esp@: ( -- addr ) get the original esp
+00 "old-esp@" 00
+=ftat ;; pointer to previous word
+:oesp
+81 EF 00000004        ;; sub edi, 4           ; make space on stack
+C7 07 =OESP           ;; mov [edi], OESP      ; push OESP onto stack
+C3                    ;; ret
+
+;; fd-in@: ( -- fd ) get FDIN
+00 "fd-in@" 00
+=oesp ;; pointer to previous word
+:fdin
+81 EF 00000004        ;; sub edi, 4           ; make space on stack
+C7 07 =FDIN           ;; mov [edi], FDIN      ; push FDIN onto stack
+C3                    ;; ret
+
+;; fd-out@: ( -- fd ) get FDOT
+00 "fd-out@" 00
+=fdin ;; pointer to previous word
+:fdot
+81 EF 00000004        ;; sub edi, 4           ; make space on stack
+C7 07 =FDOT           ;; mov [edi], FDOT      ; push FDOT onto stack
+C3                    ;; ret
+
+;; stack-min@: ( -- addr ) get the minimum address of the forth stack
+00 "stack-min@" 00
+=fdot ;; pointer to previous word
+:smin
+81 EF 00000004       ;; sub edi, 4           ; make space on stack
+C7 07 =fstk          ;; mov [edi], fstk      ; push onto stack
+C3                   ;; ret
+
+;; stack-size: ( -- size ) get the size of the forth stack
+00 "stack-size" 00
+=smin ;; pointer to previous word
+:stsz
+81 EF 00000004       ;; sub edi, 4           ; make space on stack
+C7 07 =fstz          ;; mov [edi], fstz      ; push onto stack
+C3                   ;; ret
+
+;; stack-curr@: ( -- addr ) get the current top address of the forth stack
+00 "stack-curr@" 00
+=stsz ;; pointer to previous word
+:stcr :LAST
+89 F8                ;; mov eax, edi         ; get current top of forth stack
+81 EF 00000004       ;; sub edi, 4           ; make space on stack
+89 07                ;; mov [edi], eax       ; push onto stack
+C3                   ;; ret
+
+
 
 :EOF ; need one whitespace after last label
 

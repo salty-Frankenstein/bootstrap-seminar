@@ -48,14 +48,14 @@ Code Generation
 
 Information
 
-- [ ] `head@`
-- [ ] `free@`
-- [ ] `old-esp@`
-- [ ] `fd-in@`
-- [ ] `fd-out@`
-- [ ] `stack-min@`
-- [ ] `stack-size`
-- [ ] `stack-curr@`
+- [x] `head@`
+- [x] `free@`
+- [x] `old-esp@`
+- [x] `fd-in@`
+- [x] `fd-out@`
+- [x] `stack-min@`
+- [x] `stack-size`
+- [x] `stack-curr@`
 
 ### Standard Libaray (TODO)
 

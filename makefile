@@ -89,6 +89,6 @@ clean-stage3: clean-stage2
 	rm -f stage3/stage3 stage3/stage3.o stage3/stage3_1 stage3/out1 stage3/out2 stage3/out3
 
 clean-stage4: clean-stage3
-	rm -r stage4/stage4
+	rm -f stage4/stage4
 
 clean: clean-stage1 clean-stage2 clean-stage3 clean-stage4

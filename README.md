@@ -27,7 +27,7 @@ Input/Output
 - [x] `put-string`
 
 String Manipulation
-- [ ] `read`
+- [x] `read`
 - [ ] `unread`
 - [ ] `string==`
 - [ ] `parse-number`

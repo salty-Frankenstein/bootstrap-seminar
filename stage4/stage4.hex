@@ -103,46 +103,8 @@ C7 C0 =EOF            ;; mov eax, =EOF      ; pointer to the end of code segment
 89 05 =FTXT           ;; mov [FTXT], eax    ; store in FTXT     
 
 ;; before we reach a repl, we may test some words here
-E8 -hdat     ;; call head@    
-E8 -ftat     ;; call free@    
-E8 -oesp     ;; call old-esp@ 
-E8 -fdin     ;; call fd-in@   
-E8 -fdot     ;; call fd-out@  
-E8 -smin     ;; call stack-min@ 
-E8 -stsz     ;; call stack-size 
-E8 -stcr     ;; call stack-curr@ 
-
-;; test string output
-81 EF 00000004  ;; sub edi, 4            ; make space on stack
-C7 C0 =tstr     ;; mov eax, =tstr   ; push a string address
-89 07           ;; mov [edi], eax  
-E8 -ptst     ;; call put-string   ( addr )
-
-;; test ! and @, !b and @b, put-char and get-char
-81 EF 00000004  ;; sub edi, 4      ; make space on stack
-C7 C0 =glbl     ;; mov eax, =glbl  ; push address of a global variable
-89 07           ;; mov [edi], eax  
-
-E8 -dup      ;; call dup    (addr addr)
-
-81 EF 00000004  ;; sub edi, 4            ; make space on stack
-C7 C0 c0ffeeab  ;; mov eax, 0xc0ffeeab   ; push a 0xc0ffeeab 
-89 07           ;; mov [edi], eax  (addr addr 0xc0ffeeab) 
-E8 -wtad     ;; call !                   ; glbl <- 0xc0ffeeab ( addr )
-
-E8 -dup      ;; call dup    (addr addr)
-E8 -gtch     ;; call get-char  (addr addr char)        
-E8 -dup      ;; call dup    (addr addr char char)
-E8 -ptch     ;; call put-char  (addr addr char)
-
-E8 -wtab     ;; call !b               ; glbl[0] <- char ( addr )
-;; glbl = 0xc0ffeeab -> 0xc0ffee42
-
-E8 -dup      ;; call dup    (addr addr)
-E8 -rdab     ;; call @b               ; push glbl[0] ( addr char )
-E8 -swap     ;; call swap             ; ( char addr )
-
-E8 -rdad     ;; call @         ; ( char 0xc0ffeeab )
+E8 -read     ;; call read@
+E8 -ptst     ;; call put-string@
 
 ;; E8 -repl  ;; call repl
 
@@ -341,12 +303,61 @@ C3                   ;; ret
 ;; stack-curr@: ( -- addr ) get the current top address of the forth stack
 00 "stack-curr@" 00
 =stsz ;; pointer to previous word
-:stcr :LAST
+:stcr 
 89 F8                ;; mov eax, edi         ; get current top of forth stack
 81 EF 00000004       ;; sub edi, 4           ; make space on stack
 89 07                ;; mov [edi], eax       ; push onto stack
 C3                   ;; ret
 
+;; read: ( -- string ) read a line from FDIN into string buffer
+;; if EOF, return 0
+;; skip leading whitespaces 
+;; terminate at first whitespace
+00 "read" 00
+=stcr ;; pointer to previous word
+:read
+:LAST
+;; save the starting address of string buffer
+8B 05 =FSTR       ;; mov eax, [FSTR]
+50                ;; push eax
+;; read characters into string buffer
+:rlpA   ;; read loop A: skip leading whitespaces
+E8 -gtch         ;; call get-char       ; ( addr char )
+8B 07            ;; mov eax, [edi]      ; get char
+81 C7 00000004   ;; add edi, 4          ; remember to pop
+81 F8 FFFFFFFF   ;; cmp eax, -1         ; check for EOF
+0F 84 -Reof      ;; je Reof             ; if EOF, finish
+
+:rdsp
+81 F8 00000020   ;; cmp eax, 0x20       ; check for whitespace
+0F 86 -rlpA      ;; jbe rlpA             ; if whitespace, goto loop
+
+;; store the character into string buffer
+:rlpB    ;; read loop B: store characters
+8B 0D =FSTR          ;; mov ecx, [FSTR]     ; get string buffer pointer
+88 01                ;; mov byte [ecx], al  ; store the character
+81 05 =FSTR 00000001 ;; add dword [FSTR], 1 ; increment string buffer pointer
+E8 -gtch             ;; call get-char       ; ( addr char )
+8B 07                ;; mov eax, [edi]      ; get char
+81 C7 00000004       ;; add edi, 4          ; pop
+81 F8 00000020       ;; cmp eax, 0x20       ; check for whitespace (also EOF)
+0F 87 -rlpB          ;; ja rlpB             ; if not whitespace, continue loop
+
+;; terminate the string
+8B 0D =FSTR          ;; mov ecx, [FSTR]     ; get string buffer pointer
+C6 01 00             ;; mov byte [ecx], 0   ; null terminate
+;; pop the starting address of string buffer
+58                   ;; pop eax
+;; push the address onto stack
+81 EF 00000004       ;; sub edi, 4           ; make space on stack
+89 07                ;; mov [edi], eax       ; push address onto stack
+C3                   ;; ret
+
+:Reof   ;; carefully avoid label conflict
+81 EF 00000004       ;; sub edi, 4           ; make space on stack
+C7 07 00000000       ;; mov [edi], 0
+58                   ;; pop eax         ; clean up stack
+C3                   ;; ret
 
 
 :EOF ; need one whitespace after last label

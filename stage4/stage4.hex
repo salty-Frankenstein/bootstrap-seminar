@@ -104,6 +104,7 @@ C7 C0 =EOF            ;; mov eax, =EOF      ; pointer to the end of code segment
 
 ;; before we reach a repl, we may test some words here
 E8 -read     ;; call read@
+E8 -read     ;; call read@
 E8 -ptst     ;; call put-string@
 
 ;; E8 -repl  ;; call repl
@@ -346,6 +347,7 @@ E8 -gtch             ;; call get-char       ; ( addr char )
 ;; terminate the string
 8B 0D =FSTR          ;; mov ecx, [FSTR]     ; get string buffer pointer
 C6 01 00             ;; mov byte [ecx], 0   ; null terminate
+81 05 =FSTR 00000001 ;; add dword [FSTR], 1 ; point to next free space
 ;; pop the starting address of string buffer
 58                   ;; pop eax
 ;; push the address onto stack

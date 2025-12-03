@@ -104,7 +104,9 @@ C7 C0 =EOF            ;; mov eax, =EOF      ; pointer to the end of code segment
 
 ;; before we reach a repl, we may test some words here
 E8 -read     ;; call read@
+E8 -psnb     ;; call parse-number@
 E8 -read     ;; call read@
+E8 -steq     ;; call string==
 E8 -ptst     ;; call put-string@
 
 ;; E8 -repl  ;; call repl
@@ -205,9 +207,8 @@ CD 80                   ;; int 0x80
 89 07                   ;; mov [edi], eax    ; push eax onto stack
 C3                      ;; ret
 :reof
-C7 C0 FFFFFFFF          ;; mov eax, 0xFFFFFFFF  ; return -1
 81 EF 00000004          ;; sub edi, 4        ; make space on stack
-89 07                   ;; mov [edi], eax    ; push eax onto stack
+C7 07 FFFFFFFF          ;; mov [edi], 0xFFFFFFFF     ; push -1 onto stack
 C3                      ;; ret
 
 ;; put-char: ( char -- ) write a char to FDOT
@@ -317,7 +318,6 @@ C3                   ;; ret
 00 "read" 00
 =stcr ;; pointer to previous word
 :read
-:LAST
 ;; save the starting address of string buffer
 8B 05 =FSTR       ;; mov eax, [FSTR]
 50                ;; push eax
@@ -346,7 +346,7 @@ E8 -gtch             ;; call get-char       ; ( addr char )
 
 ;; terminate the string
 8B 0D =FSTR          ;; mov ecx, [FSTR]     ; get string buffer pointer
-C6 01 00             ;; mov byte [ecx], 0   ; null terminate
+C6 01 00             ;; mov byte ;[ecx], 0   ; null terminate
 81 05 =FSTR 00000001 ;; add dword [FSTR], 1 ; point to next free space
 ;; pop the starting address of string buffer
 58                   ;; pop eax
@@ -361,6 +361,163 @@ C7 07 00000000       ;; mov [edi], 0
 58                   ;; pop eax         ; clean up stack
 C3                   ;; ret
 
+;; string==: ( addr1 addr2 -- flag ) compare two strings
+;; return 1 if equal, 0 if not equal
+00 "string==" 00
+=read ;; pointer to previous word
+:steq
+8B 07            ;; mov eax, [edi]      ; get addr2
+81 C7 00000004   ;; add edi, 4          ; pop
+8B 0F            ;; mov ecx, [edi]      ; get addr1
+81 C7 00000004   ;; add edi, 4          ; pop
+
+:seql   ;; string equal loop, compare byte by byte
+0F B6 10       ;; movzx edx, byte [eax]  ; get byte from addr2
+0F B6 19       ;; movzx ebx, byte [ecx]  ; get byte from addr1
+
+81 FA 00000000 ;; cmp edx, 0             ; check for null terminator
+0F 84 -sdnl    ;; je sdnl                ; if null, goto string d null
+3B DA          ;; cmp ebx, edx           ; compare the two bytes
+0F 85 -seqz    ;; jne seqz               ; if not equal, goto strings not equal
+81 C0 00000001 ;; add eax, 1             ; point to next byte in addr2
+81 C1 00000001 ;; add ecx, 1             ; point to next byte in addr1
+E9 -seql       ;; jmp seql               ; continue loop
+
+:sdnl   ;; string d ends, check string b
+81 FB 00000000 ;; cmp ebx, 0             ; check for null terminator
+0F 84 -seqo    ;; je seqo                ; if null, goto string equal one
+;; otherwise, strings not equal
+
+:seqz   ;; strings not equal
+81 EF 00000004 ;; sub edi, 4         ; make space on stack
+C7 07 00000000 ;; mov [edi], 0       ; push 0 onto stack
+C3             ;; ret
+
+:seqo   ;; strings equal
+81 EF 00000004 ;; sub edi, 4         ; make space on stack
+C7 07 00000001 ;; mov [edi], 1       ; push 1 onto stack
+C3             ;; ret
+
+;; parse-number: ( addr -- number ok ) parse a number from string
+;; support decimal and hexadecimal (prefix 0x)
+;; return the number and ok 1 if successful, ok 0 if not a number 
+00 "parse-number" 00
+=steq ;; pointer to previous word
+:psnb
+8B 07            ;; mov eax, [edi]     ; get addr
+81 C7 00000004   ;; add edi, 4         ; pop
+
+;check if hexadecimal
+0F B6 18        ;; movzx ebx, byte [eax]  ; get first char
+
+81 FB 00000030  ;; cmp ebx, '0'        ; check first char '0'
+0F 85 -pnnh     ;; jne pnnh            ; if not '0', parse-number not hex
+0F B6 58 01     ;; movzx ebx, byte [eax+1] ; get second char
+81 FB 000000"x" ;; cmp ebx, 'x'        ; check second char 'x'
+0F 85 -pnnh     ;; jne pnnh            ; if not 'x', parse-number not hex
+;; eax for addr, ebx for base
+;; it's hexadecimal
+C7 C3 00000010  ;; mov ebx, 16        ; base 16
+81 C0 00000002  ;; add eax, 2         ; point to first digit  
+E9 -pnLP        ;; jmp pnLP
+
+;; it's decimal
+:pnnh   ;; parse-number not hex
+C7 C3 0000000A  ;; mov ebx, 10        ; base 10
+
+:pnLP  ;; parse-number loop with initialization
+81 EF 00000004  ;; sub edi, 4       ; make space on stack
+C7 07 00000000  ;; mov [edi], 0     ; push 0 onto stack for the result
+
+:pnlp   ;; parse-number loop
+0F B6 08        ;; movzx ecx, byte [eax]  ; get current char
+
+;; check for end of string
+81 F9 00000000  ;; cmp ecx, 0             ; check for null terminator
+0F 84 -pnok     ;; je pnok                ; if null, finish parsing
+
+81 EF 00000004  ;; sub edi, 4             ; make space on stack
+89 0F           ;; mov [edi], ecx         ; push char onto stack
+81 C0 00000001  ;; add eax, 1             ; point to next char
+
+50 53           ;; push eax, ebx, save registers
+E8 -psdg        ;; call parse-digit    ; ( char -- digit )
+8B 0F           ;; mov ecx, [edi]      ; get current digit
+81 F9 FFFFFFFF  ;; cmp ecx, 0xFFFFFFFF ; check if -1
+0F 84 -pner     ;; je pner             ; if -1, not a digit
+
+;; got a digit, update the number
+5b 58           ;; pop ebx, eax           ; recover registers
+
+;; check if digit is valid (ecx: digit < ebx: base)
+39 D9           ;; cmp ecx, ebx           ; compare digit with base
+0F 8D -pnER     ;; jge pnER               ; if digit >= base, error
+
+81 C7 00000004  ;; add edi, 4             ; pop
+
+8B 17           ;; mov edx, [edi]         ; get current number
+0F AF D3        ;; imul edx, ebx          ; number * base
+01 CA           ;; add edx, ecx           ; number + digit
+89 17           ;; mov [edi], edx         ; update number
+E9 -pnlp        ;; jmp pnlp
+
+:pner   ;; parse-number error
+58 58           ;; pop ebx, eax           ; recover stack
+:pnER   ;; parse-number error, without cleaning up stack
+;; HACK: we don't need edi-=4, because we will overwrite the char on stack
+C7 07 00000000  ;; mov [edi], 0           ; push 0 (not ok) onto stack
+C3              ;; ret
+
+:pnok   ;; parse-number ok
+81 EF 00000004  ;; sub edi, 4             ; make space on stack
+C7 07 00000001  ;; mov [edi], 1           ; push 1 (ok) onto stack
+C3              ;; ret
+
+;; parse-digit: (char -- digit)  parse a digit, return -1 if not a digit
+00 "parse-digit" 00
+=psnb ;; pointer to previous word
+:psdg
+:LAST
+8B 07            ;; mov eax, [edi]      ; get char
+81 C7 00000004   ;; add edi, 4          ; pop
+
+81 F8 000000"0"  ;; cmp eax, '0'     ; check if '0' <= ch
+0F 8C -pdnd      ;; jl pdnd          ; if ch < '0', not digit
+81 F8 000000"9"  ;; cmp eax, '9'     ; check if ch <= '9'
+0F 8F -pdnd      ;; jg pdnd          ; if ch > '9', not digit
+;; it's a digit
+81 E8 000000"0"  ;; sub eax, '0'     ; convert to number
+E9 -pret         ;; jmp pret
+
+:pdnd  ;; not a digit, is it a-f or A-F?
+81 F8 000000"a"  ;; cmp eax, 'a'     ; check if 'a' <= ch
+0F 8C -pnaf      ;; jl pnaf          ; if ch < 'a', not a-f
+81 F8 000000"f"  ;; cmp eax, 'f'     ; check if ch <= 'f'
+0F 8F -pnaf      ;; jg pnaf          ; if ch > 'f', not a-f
+;; it's a-f
+81 E8 000000"a"  ;; sub eax, 'a'     ; convert to number
+81 C0 0000000A   ;; add eax, 10      ; add 10
+E9 -pret         ;; jmp pret
+
+:pnaf  ;; not a digit or a-f, is it A-F?
+81 F8 000000"A"  ;; cmp eax, 'A'     ; check if 'A' <= ch
+0F 8C -pnaA      ;; jl pnaA          ; if ch < 'A', not A-F
+81 F8 000000"F"  ;; cmp eax, 'F'     ; check if ch <= 'F'
+0F 8F -pnaA      ;; jg pnaA          ; if ch > 'F', not A-F 
+;; it's A-F
+81 E8 000000"A"  ;; sub eax, 'A'     ; convert to number
+81 C0 0000000A   ;; add eax, 10      ; add 10
+E9 -pret         ;; jmp pret
+
+:pret
+81 EF 00000004   ;; sub edi, 4       ; make space on stack
+89 07            ;; mov [edi], eax   ; push number onto stack
+C3               ;; ret
+
+:pnaA  ;; not a digit or a-f or A-F, return -1
+81 EF 00000004  ;; sub edi, 4                ; make space on stack
+C7 07 FFFFFFFF  ;; mov [edi], 0xFFFFFFFF     ; push -1 onto stack
+C3              ;; ret
 
 :EOF ; need one whitespace after last label
 

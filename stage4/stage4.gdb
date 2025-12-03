@@ -4,7 +4,7 @@
 # b *0x10094
 
 # for string test
-b *0x100c2  
+b *0x1010a
 
 # 自动运行
 # run < stage2-linked.hex

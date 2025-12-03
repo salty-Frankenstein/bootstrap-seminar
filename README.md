@@ -29,8 +29,8 @@ Input/Output
 String Manipulation
 - [x] `read`
 - [ ] `unread`
-- [ ] `string==`
-- [ ] `parse-number`
+- [x] `string==`
+- [x] `parse-number`
 
 Interpreter Functionality
 - [ ] `find-word`

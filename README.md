@@ -2,6 +2,7 @@
 
 Bootstrapping a Programming Language from Nothing
 
+## Basic Hex editing
 - Hex to Bin
 - Labels
 - Strings
@@ -37,7 +38,7 @@ Interpreter Functionality
 - [x] `find-word`
 - [x] `word-name`
 - [x] `execute`
-- [ ] `read-eval-print`
+- [x] `read-eval-print`
 
 Code Generation
 - [ ] `:`

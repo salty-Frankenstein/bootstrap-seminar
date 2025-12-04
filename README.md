@@ -31,11 +31,12 @@ String Manipulation
 - [ ] `unread`
 - [x] `string==`
 - [x] `parse-number`
+- [x] `string-copy`
 
 Interpreter Functionality
 - [x] `find-word`
 - [x] `word-name`
-- [ ] `execute`
+- [x] `execute`
 - [ ] `read-eval-print`
 
 Code Generation

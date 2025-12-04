@@ -103,11 +103,15 @@ C7 C0 =EOF            ;; mov eax, =EOF      ; pointer to the end of code segment
 89 05 =FTXT           ;; mov [FTXT], eax    ; store in FTXT     
 
 ;; before we reach a repl, we may test some words here
-E8 -read     ;; call read@
-E8 -psnb     ;; call parse-number@
-E8 -read     ;; call read@
+E8 -read     ;; call read
+E8 -fdwd     ;; call find-word
+
+
+E8 -read     ;; call read
+E8 -psnb     ;; call parse-number
+E8 -read     ;; call read
 E8 -steq     ;; call string==
-E8 -ptst     ;; call put-string@
+E8 -ptst     ;; call put-string
 
 ;; E8 -repl  ;; call repl
 
@@ -477,7 +481,6 @@ C3              ;; ret
 00 "parse-digit" 00
 =psnb ;; pointer to previous word
 :psdg
-:LAST
 8B 07            ;; mov eax, [edi]      ; get char
 81 C7 00000004   ;; add edi, 4          ; pop
 
@@ -518,6 +521,83 @@ C3               ;; ret
 81 EF 00000004  ;; sub edi, 4                ; make space on stack
 C7 07 FFFFFFFF  ;; mov [edi], 0xFFFFFFFF     ; push -1 onto stack
 C3              ;; ret
+
+;; find-word: ( addr -- wordptr immediate ) find a word by its name
+;; return wordptr and immediate flag, if not found, return 0 0
+00 "find-word" 00
+=psdg ;; pointer to previous word
+:fdwd
+:LAST
+8B 07            ;; mov eax, [edi]      ; get addr (name to find)
+81 C7 00000004   ;; add edi, 4          ; pop
+
+8B 0D =HEAD      ;; mov ecx, [HEAD]     ; get latest defined word
+
+81 EF 00000004   ;; sub edi, 4          ; make space on stack
+89 0F            ;; mov [edi], ecx      ; push current word ptr onto stack
+
+:fwlp   ;; find-word loop
+;; eax: name to find, edx: name of current word
+81 F9 00000000   ;; cmp ecx, 0           ; check for null
+0F 84 -fwnf      ;; je fwnf              ; if null, not found
+
+E8 -fwnm         ;; call find word name ; return addr in edx
+
+81 EF 00000004   ;; sub edi, 4           ; make space on stack
+89 07            ;; mov [edi], eax       ; push addr of name to find
+81 EF 00000004   ;; sub edi, 4           ; make space on stack
+89 17            ;; mov [edi], edx       ; push addr of name of current word
+
+50 52            ;; push eax, edx        ; save registers
+E8 -steq         ;; call string==        ; compare the two strings
+8B 1F            ;; mov ebx, [edi]       ; get flag
+81 C7 00000004   ;; add edi, 4           ; pop
+
+5a 58            ;; pop edx, eax         ; recover registers
+
+81 FB 00000000   ;; cmp ebx, 0           ; check if equal
+0F 85 -fwfd      ;; jne fwlp             ; if equal, done
+
+8B 0F            ;; mov ecx, [edi]       ; get current word ptr
+8B 49 FC         ;; mov ecx, [ecx-4]     ; get previous word ptr
+89 0F            ;; mov [edi], ecx       ; push current word ptr onto stack
+
+E9 -fwlp         ;; jmp fwlp             ; continue loop
+
+:fwfd  ;; found the word
+81 EA 00000001   ;; sub edx, 1           ; point to immediate flag
+0F B6 0A         ;; movzx ecx, byte [edx]; get a byte of flag
+81 EF 00000004   ;; sub edi, 4           ; make space on stack
+89 0F            ;; mov [edi], ecx       ; push immediate flag
+C3               ;; ret
+
+81 E9 00000004   ;; sub ecx, 4          ; point to previous word field
+8B 09            ;; mov ecx, [ecx]      ; get previous word ptr
+
+:fwnf  ;; find-word not found
+81 EF 00000004   ;; sub edi, 4          ; make space on stack
+C7 07 00000000   ;; mov [edi], 0        ; push 0, not found
+C3               ;; ret
+
+:fwnm  ;; find the name of current word
+;; ecx: current word ptr, edx: return addr
+51             ;; pushj ecx            ; save ecx
+
+89 CA          ;; mov edx, ecx         ; edx = current word ptr
+81 EA 00000006 ;; sub edx, 6           ; point to the last byte of name
+:fwnl
+0F B6 0A       ;; movzx ecx, byte [edx]  ; get a byte of name
+81 F9 00000001 ;; cmp ecx, 1             ; check for null 
+0F 86 -fwne    ;; jbe fwne               ; if null, finish name extraction
+
+81 EA 00000001 ;; sub edx, 1             ; point to previous byte
+E9 -fwnl       ;; jmp fwnl               ; continue loop
+
+:fwne
+59             ;; pop ecx                ; recover ecx
+81 C2 00000001 ;; add edx, 1             ; point to first byte of name
+C3             ;; ret
+
 
 :EOF ; need one whitespace after last label
 

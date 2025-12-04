@@ -33,7 +33,7 @@ String Manipulation
 - [x] `parse-number`
 
 Interpreter Functionality
-- [ ] `find-word`
+- [x] `find-word`
 - [ ] `word-name`
 - [ ] `execute`
 - [ ] `read-eval-print`

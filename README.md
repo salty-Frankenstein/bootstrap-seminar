@@ -34,7 +34,7 @@ String Manipulation
 
 Interpreter Functionality
 - [x] `find-word`
-- [ ] `word-name`
+- [x] `word-name`
 - [ ] `execute`
 - [ ] `read-eval-print`
 

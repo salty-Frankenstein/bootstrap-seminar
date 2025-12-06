@@ -324,7 +324,7 @@ E8 -gtch         ;; call get-char       ; ( addr char )
 
 :rdsp
 81 F8 00000020   ;; cmp eax, 0x20       ; check for whitespace
-0F 86 -rlpA      ;; jbe rlpA             ; if whitespace, goto loop
+0F 8E -rlpA      ;; jle rlpA             ; if whitespace, goto loop
 
 ;; store the character into string buffer
 :rlpB    ;; read loop B: store characters
@@ -335,7 +335,7 @@ E8 -gtch             ;; call get-char       ; ( addr char )
 8B 07                ;; mov eax, [edi]      ; get char
 81 C7 00000004       ;; add edi, 4          ; pop
 81 F8 00000020       ;; cmp eax, 0x20       ; check for whitespace (also EOF)
-0F 87 -rlpB          ;; ja rlpB             ; if not whitespace, continue loop
+0F 8F -rlpB          ;; jg rlpB             ; if not whitespace, continue loop
 
 ;; terminate the string
 8B 0D =FSTR          ;; mov ecx, [FSTR]     ; get string buffer pointer
@@ -573,7 +573,6 @@ C3               ;; ret
 00 "word-name" 00
 =fdwd ;; pointer to previous word
 :fwnm  ;; find the name of current word
-:LAST
 8B 17            ;; mov edx, [edi]      ; get word ptr
 81 C7 00000004   ;; add edi, 4          ; pop
 
@@ -601,7 +600,8 @@ C3             ;; ret
 FF D0           ;; call eax            ; call the word
 C3              ;; ret
 
-;; string-copy: ( src dest -- ) copy a string from src to dest
+;; string-copy: ( src dest -- len ) copy a string from src to dest
+;; return length null terminator included
 00 "string-copy" 00
 =exec ;; pointer to previous word
 :stcp
@@ -610,13 +610,19 @@ C3              ;; ret
 8B 0F            ;; mov ecx, [edi]      ; get src
 81 C7 00000004   ;; add edi, 4          ; pop
 
+C7 C2 00000000   ;; mov edx, 0          ; length counter
+
 :sclp  ;; string copy loop
 0F B6 19         ;; movzx ebx, byte [ecx]   ; get byte from src
 88 18            ;; mov byte [eax], bl      ; store byte to dest
 81 C1 00000001   ;; add ecx, 1              ; point to next byte in src
 81 C0 00000001   ;; add eax, 1              ; point to next byte in dest
+81 C2 00000001   ;; add edx, 1              ; increment length counter
 81 FB 00000000   ;; cmp ebx, 0              ; check for null terminator
 0F 85 -sclp      ;; jne sclp                ; if not null, continue loop
+
+81 EF 00000004   ;; sub edi, 4              ; make space on stack
+89 17            ;; mov [edi], edx          ; push length onto stack
 C3               ;; ret
 
 ;; read-eval-print: ( -- ) the REPL loop, return when EOF
@@ -685,6 +691,215 @@ E9 -repl         ;; jmp repl            ; back to REPL
 :repf ;; finish REPL
 81 C7 00000004   ;; add edi, 4          ; pop
 C3               ;; ret
+
+;; emit-byte: ( byte -- ) emit a byte to free text space
+00 "emit-byte" 00
+=repl ; pointer to previous word
+:embt
+C7 C0 =FTXT    ;; mov eax, FTXT         ; get free text pointer
+8B 08          ;; mov ecx, [eax]        ; get current free text pointer
+8B 17          ;; mov edx, [edi]        ; get byte to emit
+88 11          ;; mov byte [ecx], dl    ; store the byte
+81 C1 00000001 ;; add ecx, 1            ; increment free text pointer
+89 08          ;; mov [eax], ecx        ; update FTXT
+81 C7 00000004 ;; add edi, 4            ; pop
+C3             ;; ret
+
+;; emit-word: ( word -- ) emit a 4-byte word to free text space
+00 "emit-word" 00
+=embt ; pointer to previous word
+:emwd
+C7 C0 =FTXT    ;; mov eax, FTXT         ; get free text pointer
+8B 08          ;; mov ecx, [eax]        ; get current free text pointer
+8B 17          ;; mov edx, [edi]        ; get word to emit
+89 11          ;; mov [ecx], edx        ; store the word
+81 C1 00000004 ;; add ecx, 4            ; increment free text pointer
+89 08          ;; mov [eax], ecx        ; update FTXT
+81 C7 00000004 ;; add edi, 4            ; pop
+C3             ;; ret
+
+;; emit-offset: ( offset -- ) emit a 4-byte offset to free text space
+00 "emit-offset" 00
+=emwd ; pointer to previous word
+:emof
+C7 C0 =FTXT    ;; mov eax, FTXT         ; get free text pointer
+8B 08          ;; mov ecx, [eax]        ; get current free text pointer
+8B 17          ;; mov edx, [edi]        ; get offset to emit
+29 CA          ;; sub edx, ecx          ; convert to offset
+81 EA 00000004 ;; sub edx, 4            ; adjust for next instruction
+89 11          ;; mov [ecx], edx        ; store the offset
+81 C1 00000004 ;; add ecx, 4            ; increment free text pointer
+89 08          ;; mov [eax], ecx        ; update FTXT
+81 C7 00000004 ;; add edi, 4            ; pop
+C3             ;; ret
+
+;; : : ( -- ) start a new word definition
+00 ":" 00
+=emof ;; pointer to previous word
+:coln
+;; save FTXT and HEAD for recovering if needed
+8B 05 =FTXT        ;; mov eax, [FTXT]       ; get free text pointer
+50                 ;; push eax              ; save free text pointer
+8B 05 =HEAD        ;; mov eax, [HEAD]       ; get head pointer
+50                 ;; push eax              ; save head pointer
+
+;; create new word header
+81 EF 00000004         ;; sub edi, 4         ; make space on stack
+C7 07 00000000         ;; mov [edi], 0       ; push 0
+E8 -embt               ;; call emit-byte     ; emit 00
+
+E8 -read               ;; call read          ; get word name
+8B 07                  ;; mov eax, [edi]     ; get addr
+81 F8 00000000         ;; cmp eax, 0         ; check for EOF
+0F 84 -cerr            ;; je cerr            ; if EOF, compile error
+
+8B 05 =FTXT            ;; mov eax, [FTXT]    ; get free text pointer
+
+81 EF 00000004         ;; sub edi, 4         ; make space on stack
+89 07                  ;; mov [edi], eax     ; push addr of word name
+E8 -stcp               ;; call string-copy   ; copy the word name
+8B 07                  ;; mov eax, [edi]     ; get length
+81 C7 00000004         ;; add edi, 4         ; pop
+01 05 =FTXT            ;; add [FTXT], eax    ; advance free text pointer
+
+8B 05 =HEAD            ;; mov eax, [HEAD]    ; get previous HEAD
+81 EF 00000004         ;; sub edi, 4         ; make space on stack
+89 07                  ;; mov [edi], eax     ; push previous HEAD
+E8 -emwd               ;; call emit-word     ; emit previous word ptr
+;; update HEAD
+8B 05 =FTXT            ;; mov eax, [FTXT]    ; get free text pointer
+89 05 =HEAD            ;; mov [HEAD], eax    ; update HEAD
+
+;; start compiling
+:ccml  ;; compile loop
+E8 -read               ;; call read          ; read first token
+8B 07                  ;; mov eax, [edi]     ; get addr
+81 C7 00000004         ;; add edi, 4         ; pop
+
+81 F8 00000000         ;; cmp eax, 0         ; check for EOF
+0F 84 -cerr            ;; je cerr            ; if EOF, compile error
+
+;; HACK: the addr is on stack
+81 EF 00000004         ;; sub edi, 4         ; make space on stack
+50                     ;; push eax           ; save addr
+E8 -psnb               ;; call parse-number  (num ok)
+8B 07                  ;; mov eax, [edi]     ; get ok
+81 C7 00000004         ;; add edi, 4         ; pop
+
+81 F8 00000001         ;; cmp eax, 1         ; check ok
+58                     ;; pop eax            ; recover stack
+0F 84 -cnum            ;; je cnum            ; if is number, compile number
+
+;; not a number, try to find word
+89 07                  ;; mov [edi], eax     ; push addr onto stack, cover the garbage
+50                     ;; push eax           ; save addr
+E8 -fdwd               ;; call find-word    (wordptr immediate)
+
+8B 07                  ;; mov eax, [edi]     ; get immediate
+81 C7 00000004         ;; add edi, 4         ; pop
+8B 0F                  ;; mov ecx, [edi]     ; get wordptr
+81 C7 00000004         ;; add edi, 4         ; pop
+
+81 F9 00000000         ;; cmp ecx, 0         ; check if found
+0F 84 -cerR            ;; je cerR            ; if not found, compile error
+;; found the word, check if immediate
+81 F8 00000001         ;; cmp eax, 1         ; check immediate
+0F 85 -cwrd            ;; jne cwrd           ; if not immediate, compile
+
+;; immediate word, push interface argument
+58                     ;; pop eax            ; recover stack
+81 EF 00000004         ;; sub edi, 4         ; make space on stack
+C7 07 00000001         ;; mov [edi], 1       ; push 1 onto stack
+81 EF 00000004         ;; sub edi, 4         ; make space on stack
+89 0F                  ;; mov [edi], ecx     ; push wordptr onto stack
+E8 -exec               ;; call execute       ; execute the immediate word
+
+81 3F 00000003         ;; cmp [edi], 3       ; check if we need to stop compiling
+0F 85 -ccml            ;; jne ccml           ; if not, continue compile loop
+
+;; stop compiling, but leave the word in memory
+81 C7 00000004         ;; add edi, 4         ; pop
+58 58                  ;; pop pop            ; recover stack
+C3                     ;; ret
+
+:cwrd ;; compile word
+;; emit: E8 <offset> of wordptr
+58                     ;; pop eax            ; recover stack
+51                     ;; push ecx           ; save wordptr
+
+81 EF 00000004        ;; sub edi, 4         ; make space on stack
+C7 07 000000E8        ;; mov [edi], E8 
+E8 -embt              ;; call emit-byte     ; emit byte
+
+59                     ;; pop ecx            ; recover wordptr
+81 EF 00000004         ;; sub edi, 4         ; make space on stack
+89 0F                  ;; mov [edi], ecx     ; push wordptr onto stack
+E8 -emof               ;; call emit-offset   ; emit offset
+E9 -ccml               ;; jmp ccml           ; continue compile loop
+
+:cnum ;; compile number
+;; emit: 81 EF 00000004 C7 07 <number>
+
+81 EF 00000004      ;; sub edi, 4         ; make space on stack
+C7 07 81 EF 04 00   ;; mov [edi], 81 EF 04 00
+E8 -emwd            ;; call emit-word     ; emit word
+
+81 EF 00000004      ;; sub edi, 4         ; make space on stack
+C7 07 00 00 C7 07   ;; mov [edi], C7 07 00 00
+E8 -emwd            ;; call emit-word     ; emit word
+
+E8 -emwd            ;; call emit-word     ; emit the number
+E9 -ccml            ;; jmp ccml           ; continue compile loop
+
+
+:cerR ;; compile error, for word not found
+58                     ;; pop eax             ; recover addr
+81 EF 00000004         ;; sub edi, 4          ; make space on stack
+89 07                  ;; mov [edi], eax      ; push addr onto stack
+E8 -ptst               ;; call put-string     ; print the string
+
+81 EF 00000004         ;; sub edi, 4          ; make space on stack
+C7 07 000000"?"        ;; mov [edi], "?"      ; push "?" onto stack
+E8 -ptch               ;; call put-char       ; print '?'
+
+:cerr ;; compile error, recover FTXT and HEAD
+58                     ;; pop eax             ; recover head pointer
+89 05 =HEAD            ;; mov [HEAD], eax     ; restore HEAD
+58                     ;; pop eax             ; recover free text pointer
+89 05 =FTXT            ;; mov [FTXT], eax     ; restore FTXT
+C3                     ;; ret
+
+;; ; : ( -- ) end a word definition
+01 ";" 00
+=coln ;; pointer to previous word
+:scln
+81 3F 00000000         ;; cmp [edi], 0       ; check if in compiling mode
+0F 85 -scmp            ;; jne scmp           ; jmp to compile
+C3                     ;; ret                ; not compiling, just return
+
+:scmp  ;; is compiling, finish the word definition
+;; emit: C3
+C7 07 000000C3         ;; mov [edi], C3       ; push C3 onto stack
+E8 -embt               ;; call emit-byte      ; emit byte
+
+81 EF 00000004         ;; sub edi, 4          ; make space on stack
+C7 07 00000003         ;; mov [edi], 3        ; push 3 onto stack to stop compiling
+C3                     ;; ret
+
+;; immediate : ( -- ) make the current word immediate
+00 "immediate" 00
+=scln ;; pointer to previous word
+:immd
+:LAST
+8B 05 =HEAD            ;; mov eax, [HEAD]     ; get current HEAD
+81 EF 00000004         ;; sub edi, 4          ; make space on stack
+89 07                  ;; mov [edi], eax      ; push current HEAD
+E8 -fdnm               ;; call word-name      ; get name of current word
+8B 07                  ;; mov eax, [edi]      ; get addr
+81 C7 00000004         ;; add edi, 4          ; pop
+C6 40 FF 01            ;; mov byte [eax-1], 1 ; set immediate flag
+C3                     ;; ret
+
 
 :EOF ; need one whitespace after last label
 

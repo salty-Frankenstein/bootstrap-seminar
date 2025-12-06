@@ -41,12 +41,12 @@ Interpreter Functionality
 - [x] `read-eval-print`
 
 Code Generation
-- [ ] `:`
-- [ ] `;`
-- [ ] `immediate`
-- [ ] `emit-byte`
-- [ ] `emit-word`
-- [ ] `emit-offset`
+- [x] `:`
+- [x] `;`
+- [x] `immediate`
+- [x] `emit-byte`
+- [x] `emit-word`
+- [x] `emit-offset`
 
 Information
 

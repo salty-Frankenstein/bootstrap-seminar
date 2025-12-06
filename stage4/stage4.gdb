@@ -7,8 +7,8 @@
 b *0x1010a
 
 # 自动运行
-# run < stage2-linked.hex
-run
+run < stage4/tests/test.txt
+# run
 
 layout asm
 layout regs

@@ -101,4 +101,5 @@ clean-stage4: clean-stage3
 clean-stage5: clean-stage3
 	rm -f stage5/stage5
 
-clean: clean-stage1 clean-stage2 clean-stage3 clean-stage4 clean-stage5
+clean: clean-stage1 clean-stage2 clean-stage3 clean-stage4 clean-stage5 
+	rm -f out.txt

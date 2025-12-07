@@ -5,10 +5,11 @@
 
 # for string test
 b *0x1010a
+b *0x10115
 # b *0x101c2
 
 # 自动运行
-run < stage5/boot.forth
+run < stage5/boot.forth > out.txt
 # run
 
 layout asm

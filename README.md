@@ -67,8 +67,8 @@ Information
 
 Arithmetic Operations
 
-- [x] `+`, `-`, `and`, `or`, `xor`
-- [x] `==`
+- [x] `+`, `-`, `*`, `/`, `%`, `and`, `or`, `xor`
+- [x] `==`, `<`, `<=`, `>`, `>=`, `u<`, `u<=`, `u>`, `u>=`
 
 Control Flow
 
@@ -78,6 +78,24 @@ Control Flow
 Comments
 
 - [x] `(`, `#`
+
+I/O
+
+- [x] `put-number`, `put-hex`, `cr`, `space`
+- [x] `.`, `.x` 
+
+Global Variables
+
+- [x] `define-var`
+
+Debugging
+
+- [x] `print-stack`
+
+Information about the Interpreter
+
+- [x] `head`, `=head`, `current-pos`, `fd-in`, `=fd-in`, `fd-out`, `=fd-out`
+- [x] `stack-max@` 
 
 ## Makefile
 

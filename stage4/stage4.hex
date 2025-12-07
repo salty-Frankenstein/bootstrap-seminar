@@ -225,6 +225,7 @@ C3                      ;; ret
 81 C7 00000004          ;; add edi, 4           ; pop
 ;; count length in edx
 C7 C2 FFFFFFFF          ;; mov edx, 0xFFFFFFFF  ; edx = -1
+89 C8                   ;; mov eax, ecx         ; eax = addr
 :lcnt
 81 C2 00000001          ;; add edx, 1           ; edx++
 0F B6 18                ;; movzx ebx, [eax]     ; get a byte

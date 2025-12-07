@@ -68,7 +68,16 @@ Information
 Arithmetic Operations
 
 - [x] `+`, `-`, `and`, `or`, `xor`
+- [x] `==`
 
+Control Flow
+
+- [x] `if`, `else`, `fi`
+- [x] `return`
+
+Comments
+
+- [x] `(`, `#`
 
 ## Makefile
 

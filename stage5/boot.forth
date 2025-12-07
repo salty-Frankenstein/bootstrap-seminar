@@ -68,5 +68,23 @@
   - if 0 else 1 fi
 ;
 
-0x1 0x2 +
+: consume-until
+  dup
+  get-char 
+  dup 0xFFFFFFFF ==
+  if drop return 
+  else 
+    == if drop return
+    else consume-until
+    fi
+  fi
+;
+
+: ( 0x29 consume-until ; immediate
+: # 0x0A consume-until ; immediate
+
+( now we can use comments )
+0x1 0x2 + 
+
+# this is also a comment 
 3 ==

@@ -77,6 +77,13 @@ stage4/stage4: stage3/stage3_1 stage4/stage4.hex
 test-stage4: stage4/stage4
 	gdb -x ./stage4/stage4.gdb stage4/stage4
 
+stage5/stage5: stage3/stage3_1 stage5/stage5.hex
+	stage3/stage3_1 < stage5/stage5.hex > stage5/stage5
+	chmod +x stage5/stage5
+
+test-stage5: stage5/stage5
+	gdb -x ./stage5/stage5.gdb stage5/stage5
+
 test: test-stage1 test-stage2 test-stage3
 
 clean-stage1:
@@ -91,4 +98,7 @@ clean-stage3: clean-stage2
 clean-stage4: clean-stage3
 	rm -f stage4/stage4
 
-clean: clean-stage1 clean-stage2 clean-stage3 clean-stage4
+clean-stage5: clean-stage3
+	rm -f stage5/stage5
+
+clean: clean-stage1 clean-stage2 clean-stage3 clean-stage4 clean-stage5

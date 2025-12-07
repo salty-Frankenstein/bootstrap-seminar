@@ -8,7 +8,7 @@ b *0x1010a
 # b *0x101c2
 
 # 自动运行
-run < stage4/tests/test_def.txt
+run < stage5/boot.forth
 # run
 
 layout asm

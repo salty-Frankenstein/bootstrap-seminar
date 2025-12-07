@@ -10,7 +10,7 @@ Bootstrapping a Programming Language from Nothing
 ## Forth implementation
 
 ### Core Language
-A `string` is a 32bits pointer.
+A `string` is a 32bit pointer.
 
 Stack Manipulation
 - [x] `dup`: `( n -- n n )`

@@ -808,12 +808,16 @@ C7 07 00000001         ;; mov [edi], 1       ; push 1 onto stack
 E8 -exec               ;; call execute       ; execute the immediate word
 
 81 3F 00000003         ;; cmp [edi], 3       ; check if we need to stop compiling
-0F 85 -ccml            ;; jne ccml           ; if not, continue compile loop
+0F 85 -ccnt            ;; jne ccnt           ; if not, continue compile loop
 
 ;; stop compiling, but leave the word in memory
 81 C7 00000004         ;; add edi, 4         ; pop
 58 58                  ;; pop pop            ; recover stack
 C3                     ;; ret
+
+:ccnt
+81 C7 00000004         ;; add edi, 4         ; pop, discard the return value
+E9 -ccml               ;; jmp ccml           ; continue compile loop
 
 :cwrd ;; compile word
 ;; emit: E8 <offset> of wordptr
@@ -886,7 +890,7 @@ C3                     ;; ret
 8B 05 =HEAD            ;; mov eax, [HEAD]     ; get current HEAD
 81 EF 00000004         ;; sub edi, 4          ; make space on stack
 89 07                  ;; mov [edi], eax      ; push current HEAD
-E8 -fdnm               ;; call word-name      ; get name of current word
+E8 -fwnm               ;; call word-name      ; get name of current word
 8B 07                  ;; mov eax, [edi]      ; get addr
 81 C7 00000004         ;; add edi, 4          ; pop
 C6 40 FF 01            ;; mov byte [eax-1], 1 ; set immediate flag

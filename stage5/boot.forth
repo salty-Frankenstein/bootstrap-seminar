@@ -24,5 +24,49 @@
 0x09 define-operator or
 0x31 define-operator xor
 
+: current-pos free@ @ ;
+
+: if
+  drop
+
+  0x8B emit-byte 0x07 emit-byte
+  0x81 emit-byte 0xC7 emit-byte 4 emit-word
+  0x81 emit-byte 0xF8 emit-byte 0 emit-word
+  0x0F emit-byte 0x84 emit-byte 
+
+  current-pos
+  0 emit-word
+
+  1
+; immediate
+
+: else
+  drop
+
+  0xE9 emit-byte
+  current-pos
+
+  0 emit-word
+  swap
+  dup
+  4 + current-pos swap - !
+  1
+; immediate
+
+: fi 
+  drop
+  dup
+  4 + current-pos swap - !
+  1
+; immediate
+
+: return 
+  0xC3 emit-byte
+; immediate
+
+: ==
+  - if 0 else 1 fi
+;
+
 0x1 0x2 +
-0x2 -
+3 ==

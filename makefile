@@ -81,8 +81,11 @@ stage5/stage5: stage3/stage3_1 stage5/stage5.hex
 	stage3/stage3_1 < stage5/stage5.hex > stage5/stage5
 	chmod +x stage5/stage5
 
-test-stage5: stage5/stage5
+test-stage5-debug: stage5/stage5
 	gdb -x ./stage5/stage5.gdb stage5/stage5
+
+test-stage5: stage5/stage5 stage5/boot.forth stage5/test.forth
+	cat stage5/boot.forth stage5/test.forth | stage5/stage5
 
 test: test-stage1 test-stage2 test-stage3
 

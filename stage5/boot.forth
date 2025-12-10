@@ -123,6 +123,11 @@ define-word %
 0x89 emit-byte 0x17 emit-byte                 # mov [edi], edx
 0xC3 emit-byte
 
+# define shifr right 4
+define-word shr4
+0xC1 emit-byte 0x2F emit-byte 0x4 emit-byte    # shr [edi], 4
+0xC3 emit-byte
+
 # define relational operator
 : define-rel # usage: opcode define-rel word-name
   define-word 
@@ -153,7 +158,7 @@ define-word %
 
 : hex-digit dup 10 < if 0x30 + else 0x37 + fi ;
 
-: put-hex-digit dup 16 % hex-digit swap 16 / ;
+: put-hex-digit dup 0x0F and hex-digit swap shr4 ;
 
 : put-number'  ( number -- digits ) # convert to digits recursively
   put-number-digit
@@ -172,7 +177,8 @@ define-word %
   put-number-rec
 ;
 
-: put-number ( number -- ) # print number in decimal
+: put-number ( number -- ) # print number in decimal, signed
+  dup 0 < if 0 swap - 0x2D put-char else fi   # print '-' if negative
   0xFFFFFFFF swap put-number' put-number-rec drop
 ;
 
@@ -227,9 +233,22 @@ stack-max@@ stack-curr@ 4 + !
   4 - print-stack-rec
 ;
 
+: print-stack-rec-x ( addr -- ) # print stack recursively, hexadecimal
+  dup 4 - stack-curr@ <=
+  if drop return else fi
+  dup @ put-hex space
+  4 - print-stack-rec-x
+;
+
 : print-stack
   0x28 put-char space
   stack-max@ 4 - print-stack-rec
+  0x29 put-char cr
+;
+
+: print-stack-x
+  0x28 put-char space
+  stack-max@ 4 - print-stack-rec-x
   0x29 put-char cr
 ;
 
@@ -241,8 +260,3 @@ stack-max@@ stack-curr@ 4 + !
 ;
 
 : print-words head print-words-rec ;
-
-print-words
-
-1 2 3
-print-stack

@@ -57,8 +57,8 @@ Information
 - [x] `head@`: `( -- addr )` get the lastes defined word address
 - [x] `free@`: `( -- addr )` get the free text space pointer
 - [x] `old-esp@`: `( -- addr )` get the original esp
-- [x] `fd-in@`: `( -- fd )` get the input file despriptor
-- [x] `fd-out@`: `( -- fd )` get the output file despriptor
+- [x] `fd-in@`: `( -- fd )` get the input file descriptor
+- [x] `fd-out@`: `( -- fd )` get the output file descriptor
 - [x] `stack-min@`: `( -- addr )` get the minimum address of the forth stack
 - [x] `stack-size`: `( -- size )` get the size of the forth stack
 - [x] `stack-curr@`: `( -- addr )` get the current top address of the forth stack

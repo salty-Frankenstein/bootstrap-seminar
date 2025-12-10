@@ -14,6 +14,7 @@
 00300000@ :fstk  ; forth stack
 00100000@ :fstz  ; forth stack size
 00500000@ :strb  ; string buffer
+00600000@ :data  ; data segment (not used yet)
 
 ;; text segment starts at virtual address 00010000
 00010000@ :text
@@ -31,7 +32,7 @@ $PH      ; phoff (00000034)
 00000000 ; flags
 0034     ; ehsize
 0020     ; phentsize
-0004     ; phnum (4)
+0005     ; phnum (5)
 0000     ; shentsize
 0000     ; shnum
 0000     ; shstrndx
@@ -75,6 +76,16 @@ $EOF     ; filesz
 00000001 ; type
 00000000 ; offset
 =strb    ; vaddr
+00000000 ; paddr
+00000000 ; filesz
+00100000 ; memsz 1 MiB
+00000006 ; flags (no execute)
+00001000 ; alignment
+
+;; Program header 5: data segment (not used yet), 1 MiB
+00000001 ; type
+00000000 ; offset
+=data    ; vaddr
 00000000 ; paddr
 00000000 ; filesz
 00100000 ; memsz 1 MiB

@@ -214,17 +214,44 @@ define-word shr4
   # allocate 4 bytes for the variable, it returns the address of the variable
   0x81 emit-byte 0xEF emit-byte 4 emit-word  # sub edi, 4
   0xC7 emit-byte 0x07 emit-byte 
-  allocate-var dup emit-word                 # get the addr of the variable: mov eax, addr
+  allocate-var dup emit-word                 # get the addr of the variable: mov [edi], addr
   0 !                                        # initialize it to 0
   0xC3 emit-byte                             # ret
   1
 ; immediate
 
-# define a global variable stack-max
-define-var stack-max@@
-# initialize it to be the maximum address of stack
-stack-max@@ stack-curr@ 4 + !
-: stack-max@ stack-max@@ @ ;
+: defvar  # usage: defvar varname@ varname =varname
+  drop
+  # first, make a word to get the address of the variable
+  define-word
+  # allocate 4 bytes for the variable, it returns the address of the variable
+  0x81 emit-byte 0xEF emit-byte 4 emit-word  # sub edi, 4
+  0xC7 emit-byte 0x07 emit-byte 
+  allocate-var dup emit-word                 # get the addr of the variable: mov [edi], addr
+  dup 0 !                                    # initialize it to 0, make sure addr is still on stack
+  0xC3 emit-byte                             # ret
+
+  # then, make a word to get the value of the variable
+  define-word
+  0x81 emit-byte 0xEF emit-byte 4 emit-word    # sub edi, 4
+  0x8B emit-byte 0x05 emit-byte dup emit-word  # mov eax, [addr]
+  0x89 emit-byte 0x07 emit-byte                # mov [edi], eax
+  0xC3 emit-byte                               # ret
+
+  # finally, make a word to set the value of the variable
+  define-word
+  0x8B emit-byte 0x07 emit-byte                # mov eax, [edi]
+  0x81 emit-byte 0xC7 emit-byte 4 emit-word    # add edi, 4
+  0x89 emit-byte 0x05 emit-byte emit-word      # mov [addr], eax
+  0xC3 emit-byte                               # ret
+
+  1
+; immediate
+
+defvar stack-max@@ stack-max@ =stack-max@   # define a global variable stack-max
+stack-curr@ =stack-max@                     # initialize it to be the maximum address of stack
+defvar data-top@@ data-top@ =data-top@      # define a global variable data-top
+0x600000 =data-top@                         # initialize it to be the start address of data segment
 
 : print-stack-rec ( addr -- ) # print stack recursively
   dup 4 - stack-curr@ <=
@@ -260,3 +287,21 @@ stack-max@@ stack-curr@ 4 + !
 ;
 
 : print-words head print-words-rec ;
+
+: '     # start a character literal
+  drop get-char 1
+; immediate
+
+: read-string     # read a string literal
+  get-char
+  dup 0x22 == if drop return else fi
+  data-top@ swap !b data-top@ 1 + =data-top@  # store the character and advance data-top
+  read-string
+; 
+
+: "     # string literal
+  drop 
+  data-top@  # get the starting address, and return
+  read-string
+  1
+; immediate

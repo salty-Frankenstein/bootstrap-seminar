@@ -1,6 +1,7 @@
 # bootstrap seminar
 
 Bootstrapping a Programming Language from Nothing
+Reference: Filip Strömbäck [Bootstrapping a Language from Scratch](https://gitlab.liu.se/filst04/bootstrap)
 
 ## Basic Hex editing
 - Hex to Bin
@@ -67,8 +68,8 @@ Information
 
 Arithmetic Operations
 
-- [x] `+`, `-`, `*`, `/`, `%`, `and`, `or`, `xor`
-- [x] `==`, `<`, `<=`, `>`, `>=`, `u<`, `u<=`, `u>`, `u>=`
+- [x] `+`, `-`, `*`, `/`, `%`, `and`, `or`, `xor`: `( n1 n2 -- n1 op n2 )`
+- [x] `==`, `<`, `<=`, `>`, `>=`, `u<`, `u<=`, `u>`, `u>=`: u for unsigned
 
 Control Flow
 
@@ -79,23 +80,35 @@ Comments
 
 - [x] `(`, `#`
 
+Literals
+
+- [x] `'`: start a character literal `' a`
+- [x] `"`: start a string literal `" hello"`
+
 I/O
 
-- [x] `put-number`, `put-hex`, `cr`, `space`
-- [x] `.`, `.x` 
+- [x] `put-number`: print decimal number, signed
+- [x] `put-hex`: print hexadecimal number, unsigned
+- [x] `cr`, `space`: print new line, space
+- [x] `.`, `.x`: print number and new line
 
 Global Variables
 
-- [x] `define-var`
+- [x] `define-var`: define a global variable, return its address
+- [x] `defvar`: usage `defvar varname@ varname =varname`, define three words that return its address, return its value and modify its value respectively
 
 Debugging
 
-- [x] `print-stack`
+- [x] `print-stack`: print the Forth stack
+- [x] `print-stack-x`: print the Forth stack in hexadecimal
 
 Information about the Interpreter
 
-- [x] `head`, `=head`, `current-pos`, `fd-in`, `=fd-in`, `fd-out`, `=fd-out`
-- [x] `stack-max@` 
+- [x] `head`, `=head`: pointer to the last word defined
+- [x] `current-pos`: pointer to the free space of text
+- [x] `fd-in`, `=fd-in`, `fd-out`, `=fd-out`: file descriptors
+- [x] `stack-max@`: pointer to the base of Forth stack
+- [x] `data-top@`: pointer to the free space of data
 
 ## Makefile
 
